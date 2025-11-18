@@ -1,0 +1,272 @@
+"""
+MCP Architecture Visualization
+
+This file documents the Model Context Protocol integration architecture
+and how all components interact to provide standardized tool access.
+"""
+
+"""
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        AI TRAVEL PLANNER - MCP ARCHITECTURE                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                           User Interface Layer                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  • Interactive Planner (interactive_planner.py)                              │
+│  • Main CLI (main.py)                                                        │
+│  • CrewAI Agent (crewai_agent/agent.py)                                      │
+│  • ADK Agent (adk_agent/agent.py)                                            │
+└────────────────────────────────┬─────────────────────────────────────────────┘
+                                 │ Uses tools via MCP
+                                 │
+┌────────────────────────────────▼─────────────────────────────────────────────┐
+│                     MCP Protocol Layer (Agent Bridge)                        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  ┌─ MCP Client ──────────────────────────────────────────────────────────┐   │
+│  │                                                                       │   │
+│  │  • Tool Discovery (list_tools())                                      │   │
+│  │  • Tool Lookup (get_tool_definition())                                │   │
+│  │  • Tool Registry Management                                           │   │
+│  │  • Request Validation                                                 │   │
+│  │  • Response Handling                                                  │   │
+│  │                                                                       │   │
+│  └───────────────────────────────────────────────────────────────────────┘   │
+│                                                                               │
+│  ┌─ Tool Adapters ───────────────────────────────────────────────────────┐   │
+│  │                                                                       │   │
+│  │  ┌─ MCPGeminiAdapter ──────┐  ┌─ MCPGroqAdapter ───────┐              │   │
+│  │  │ • research()            │  │ • generate()           │              │   │
+│  │  │ • Async wrapper         │  │ • Async wrapper        │              │   │
+│  │  │ • Error handling        │  │ • Error handling       │              │   │
+│  │  └────────────────────────┘  └────────────────────────┘              │   │
+│  │                                                                       │   │
+│  │  ┌─ MCPDuckDuckGoAdapter ──┐  ┌─ MCPCalculatorAdapter ──┐            │   │
+│  │  │ • search()              │  │ • calculate()          │            │   │
+│  │  │ • Async wrapper         │  │ • Async wrapper        │            │   │
+│  │  │ • Error handling        │  │ • Error handling       │            │   │
+│  │  └─────────────────────────┘  └────────────────────────┘            │   │
+│  │                                                                       │   │
+│  └───────────────────────────────────────────────────────────────────────┘   │
+└────────────────────────────────┬──────────────────────────────────────────────┘
+                                 │
+            ┌────────────────────┼────────────────────┐
+            │                    │                    │
+┌───────────▼──────────┐  ┌──────▼──────────┐  ┌────▼─────────────┐
+│  Tool Implementation  │  │ Tool Impl.     │  │  Tool Impl.      │
+│      Layer 1          │  │    Layer 2     │  │    Layer 3       │
+├──────────────────────┤  ├────────────────┤  ├──────────────────┤
+│                      │  │                │  │                  │
+│  Gemini Research     │  │  Groq Client   │  │ DuckDuckGo       │
+│  Client              │  │  (LLM API)     │  │ Client           │
+│  ─────────────────   │  │ ─────────────  │  │ ─────────────    │
+│  • API Calls         │  │ • API Calls    │  │ • Web Scraping   │
+│  • Response Parse    │  │ • JSON Mode    │  │ • Link Extract   │
+│  • Error Handling    │  │ • Streaming    │  │ • Pagination     │
+│  • Caching           │  │ • Retry Logic  │  │ • Rate Limiting  │
+│                      │  │                │  │                  │
+└──────────────────────┘  └────────────────┘  └──────────────────┘
+
+                    ┌────────────────────┐
+                    │ Tool Implementation │
+                    │      Layer 4        │
+                    ├────────────────────┤
+                    │                    │
+                    │ Calculator         │
+                    │ (Local)            │
+                    │ ──────────────     │
+                    │ • Summation        │
+                    │ • Per-Day Calc     │
+                    │ • Currency Conv.   │
+                    │ • Budget Check     │
+                    │                    │
+                    └────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        Observability & Tracing Layer                         │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  • Trace ID: Links all tool invocations across workflow                      │
+│  • Correlation ID: Groups related requests                                   │
+│  • JSON Logger: Structured logging with context                              │
+│  • Monitoring: Event callbacks for observability                             │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              A2A Protocol Layer                              │
+├──────────────────────────────────────────────────────────────────────────────┤
+│  • Message Envelope: Wraps MCP requests/responses                            │
+│  • HMAC Signing: Secures MCP messages                                        │
+│  • Distributed Tracing: Trace ID propagation                                 │
+│  • In-Memory Adapter: Routes MCP messages between agents                     │
+│  • State Store: Manages MCP response state                                   │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+DATA FLOW EXAMPLE: Research Request
+────────────────────────────────────
+
+1. Interactive Planner calls search_destination_info("Paris", ...)
+                                          │
+                                          ▼
+2. Creates MCP Request:
+   {
+     "tool_name": "gemini_research",
+     "arguments": {"destination": "Paris", ...},
+     "trace_id": "trace-xyz",
+     "correlation_id": "corr-abc"
+   }
+                                          │
+                                          ▼
+3. invoke_mcp_tool() in mcp_tool_adapter.py:
+   • Validates request against tool schema
+   • Executes MCPGeminiAdapter.research()
+   • Handles errors gracefully
+                                          │
+                                          ▼
+4. MCPGeminiAdapter.research() calls GeminiResearchClient:
+   • Makes API call to Gemini
+   • Parses response
+   • Returns structured result
+                                          │
+                                          ▼
+5. Creates MCP Response:
+   {
+     "tool_name": "gemini_research",
+     "result": {
+       "destination": "Paris",
+       "weather_summary": "...",
+       ...
+     },
+     "error": null,
+     "trace_id": "trace-xyz",
+     "correlation_id": "corr-abc"
+   }
+                                          │
+                                          ▼
+6. Interactive Planner receives response:
+   • Extracts research data
+   • Continues workflow
+   • Stores in context
+
+
+MESSAGE FLOW WITH A2A PROTOCOL
+──────────────────────────────
+
+CrewAI Agent                          ADK Agent
+    │                                    │
+    │ MCP Tool Request                   │
+    ├──────────────────────────┐         │
+    │   [Invoke MCP Tool]      │         │
+    │ - Tool: groq_llm         │         │
+    │ - Args: {prompt: "..."}  │         │
+    │ - Trace: trace-123       │         │
+    │ - Corr: corr-456         │         │
+    │                          │         │
+    │                          ▼         │
+    │                   MCP Client       │
+    │                          │         │
+    │                    [Execute]       │
+    │                          │         │
+    │                   Groq LLM API     │
+    │                          │         │
+    │                          ▼         │
+    │                   MCP Response     │
+    │                          │         │
+    │   <─────────────────────┘         │
+    │                                   │
+    │ A2A Protocol Message               │
+    ├──────────────────────────────────>│
+    │ - Type: proposal                  │
+    │ - Trace: trace-123                │
+    │ - Corr: corr-456                  │
+    │ - Signature: [HMAC]               │
+    │                                   │
+    │                          [Process]│
+    │                                   │
+    │                          [MCP Tool │
+    │                           Request] │
+    │                                   │
+    │     A2A Protocol Message          │
+    │<─────────────────────────────────┤
+    │ - Type: optimized_plan            │
+    │ - Trace: trace-123                │
+    │ - Corr: corr-456                  │
+    │ - Signature: [HMAC]               │
+
+
+TOOL REGISTRY STRUCTURE
+───────────────────────
+
+MCPClient.tools_registry = {
+    "gemini_research": MCPToolDefinition(
+        name="gemini_research",
+        category="research",
+        description="Research destination...",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "destination": {"type": "string"},
+                ...
+            }
+        }
+    ),
+    "groq_llm": MCPToolDefinition(...),
+    "duckduckgo_search": MCPToolDefinition(...),
+    "calculator": MCPToolDefinition(...)
+}
+
+
+KEY BENEFITS
+────────────
+
+1. STANDARDIZATION
+   ✓ All tools follow same request/response format
+   ✓ Schema validation prevents invalid inputs
+   ✓ Consistent error handling
+
+2. DISCOVERABILITY
+   ✓ Tools self-describe via JSON Schema
+   ✓ Runtime tool discovery via list_tools()
+   ✓ Easy to extend with new tools
+
+3. OBSERVABILITY
+   ✓ Trace IDs for request tracking
+   ✓ Correlation IDs for grouped operations
+   ✓ Structured logging with context
+
+4. RELIABILITY
+   ✓ Error responses preserve trace context
+   ✓ Fallback mechanisms for failures
+   ✓ Async/await for production use
+
+5. EXTENSIBILITY
+   ✓ Add new tools by implementing adapter
+   ✓ Register in MCPClient
+   ✓ Automatic discovery for consumers
+
+
+COMPLIANCE SUMMARY
+──────────────────
+
+✅ MCP Requirement: 2+ External Tools
+   • Gemini 2.0 Flash (API-based)
+   • Groq LLM (API-based)
+   • DuckDuckGo Search (Web-based)
+   • Budget Calculator (Local)
+
+✅ Tool Discovery
+   • MCPClient.list_tools() returns all tools
+   • JSON Schema validation for inputs
+
+✅ Request/Response Format
+   • MCPToolRequest: standardized request
+   • MCPToolResponse: standardized response
+
+✅ Error Handling
+   • Structured error responses
+   • Trace IDs preserved in errors
+
+✅ Async Support
+   • All tools support async/await
+   • Production-ready concurrency
+"""

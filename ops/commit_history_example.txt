@@ -1,0 +1,30 @@
+init: project scaffold
+feat: add .gitignore and environment files
+feat: implement Pydantic models for itinerary and monitoring
+feat: add application settings with BaseSettings
+feat: implement A2A protocol with HMAC signing
+feat: add in-memory A2A adapter with message queues
+feat: implement state store interface and in-memory backend
+feat: add structured JSON logger with correlation IDs
+feat: implement Groq API client wrapper
+feat: add Gemini 2.0 Flash client
+feat: implement DuckDuckGo search client
+feat: add budget calculator and currency conversion
+feat: implement monitoring callbacks system
+feat: add logger adapter for monitoring events
+feat: create CrewAI agent skeleton with A2A support
+feat: add CrewAI agent lifecycle handlers
+feat: implement ADK agent skeleton with optimization
+feat: create dynamic planner workflow orchestration
+feat: add main entry point with CLI interface
+test: add unit tests for Pydantic models
+test: add A2A protocol signing and verification tests
+test: implement state store tests
+test: add monitoring callback tests
+test: create integration test for end-to-end workflow
+docs: add sample itinerary request JSON
+docs: add sample A2A trace JSON
+chore: add local run script for development
+chore: add database migration script stub
+chore: add demo data seeding script
+docs: add comprehensive README with architecture
